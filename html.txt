@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Integration Calculator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            max-width: 800px;
+            width: 100%;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-top: 0;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
+        .bounds {
+            display: flex;
+            gap: 15px;
+        }
+        .bounds .input-group {
+            flex: 1;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #2a75d3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #1a5cad;
+        }
+        .result-box {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f0fe;
+            border-left: 5px solid #2a75d3;
+            font-size: 18px;
+            border-radius: 4px;
+        }
+        #plot {
+            margin-top: 20px;
+            width: 100%;
+            height: 400px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Integration Calculator</h1>
+    
+    <div class="input-group">
+        <label for="func">Function f(x):</label>
+        <input type="text" id="func" value="sin(x) + 0.5" placeholder="e.g., x^2, sin(x), exp(x)">
+    </div>
+
+    <div class="bounds">
+        <div class="input-group">
+            <label for="lower">Lower Bound (a):</label>
+            <input type="text" id="lower" value="0" placeholder="e.g., 0, -pi, 2">
+        </div>
+        <div class="input-group">
+            <label for="upper">Upper Bound (b):</label>
+            <input type="text" id="upper" value="2*pi" placeholder="e.g., 5, pi/2, 10">
+        </div>
+    </div>
+
+    <button onclick="calculate()">Calculate & Graph</button>
+
+    <div id="resultBox" class="result-box" style="display: none;"></div>
+    
+    <div id="plot"></div>
+</div>
+
+<script>
+    function calculate() {
+        const exprStr = document.getElementById('func').value;
+        const aStr = document.getElementById('lower').value;
+        const bStr = document.getElementById('upper').value;
+        const resultBox = document.getElementById('resultBox');
+
+        try {
+            // Evaluate bounds (allows inputs like 'pi' or '2*pi')
+            const a = math.evaluate(aStr);
+            const b = math.evaluate(bStr);
+
+            // Compile the function for fast evaluation
+            const compiled = math.compile(exprStr);
+            const f = (x) => compiled.evaluate({ x: x });
+
+            // Numerical Integration using Simpson's 1/3 Rule
+            let n = 2000; // Even number of intervals
+            let h = (b - a) / n;
+            let sum = f(a) + f(b);
+            
+            for (let i = 1; i < n; i++) {
+                let x = a + i * h;
+                sum += f(x) * (i % 2 === 0 ? 2 : 4);
+            }
+            let result = (h / 3) * sum;
+
+            // Show result
+            resultBox.style.display = 'block';
+            resultBox.innerHTML = `Area = <strong>${math.round(result, 6)}</strong>`;
+
+            // Draw the graph
+            drawGraph(f, a, b);
+
+        } catch (err) {
+            resultBox.style.display = 'block';
+            resultBox.style.borderLeftColor = 'red';
+            resultBox.style.backgroundColor = '#fde8e8';
+            resultBox.innerHTML = `<span style="color: red;"><strong>Error:</strong> ${err.message}. Please check your math syntax.</span>`;
+        }
+    }
+
+    function drawGraph(f, a, b) {
+        // Determine the x-axis range to show a bit past the bounds
+        const margin = Math.abs(b - a) * 0.3 || 2;
+        const xMin = Math.min(a, b) - margin;
+        const xMax = Math.max(a, b) + margin;
+        
+        // Generate coordinates for the function line
+        const xLine = [];
+        const yLine = [];
+        for (let x = xMin; x <= xMax; x += (xMax - xMin) / 500) {
+            xLine.push(x);
+            yLine.push(f(x));
+        }
+
+        // Generate coordinates for the shaded integral area
+        const xArea = [];
+        const yArea = [];
+        const start = Math.min(a, b);
+        const end = Math.max(a, b);
+        for (let x = start; x <= end; x += (end - start) / 200) {
+            xArea.push(x);
+            yArea.push(f(x));
+        }
+
+        // Plotly Trace for the outline of the function
+        const traceLine = {
+            x: xLine,
+            y: yLine,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'f(x)',
+            line: { color: '#2a75d3', width: 2 }
+        };
+
+        // Plotly Trace for the shaded area under the curve
+        const traceArea = {
+            x: xArea,
+            y: yArea,
+            fill: 'tozeroy',
+            type: 'scatter',
+            mode: 'none',
+            name: `Integral`,
+            fillcolor: 'rgba(42, 117, 211, 0.3)'
+        };
+
+        const layout = {
+            title: 'Area Under Curve',
+            margin: { t: 40, l: 40, r: 40, b: 40 },
+            showlegend: false,
+            xaxis: { zeroline: true, zerolinecolor: '#999' },
+            yaxis: { zeroline: true, zerolinecolor: '#999' }
+        };
+
+        Plotly.newPlot('plot', [traceArea, traceLine], layout, { displayModeBar: false });
+    }
+
+    // Run once on load to show initial graph
+    window.onload = calculate;
+</script>
+
+</body>
+</html>
